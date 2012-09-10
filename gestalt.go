@@ -5,6 +5,7 @@ package gestalt
 import (
 	"fmt"
 	"strings"
+	"io/ioutil"
 )
 
 // Gestalt is just a map[string]interface{} and can be used as such.
@@ -14,18 +15,36 @@ type Gestalt map[string]interface{}
 // API
 // ----------------------------------------------------------------------
 
-// Create a new Gestalt object from spec
+// Create a new Gestalt object from spec.
+// If spec is zero value string, it simply returns an empty intances.
 func New(spec string) (Gestalt, error) {
-	if spec == "" {
-		return nil, fmt.Errorf("spec is zerovalue")
-	}
+//	if spec == "" {
+//		return nil, fmt.Errorf("spec is zerovalue")
+//	}
 
 	gestalt, e := parse(spec)
 	if e != nil {
 		return nil, e
 	}
 
+	for k, v := range gestalt {
+		fmt.Printf("DEBUG <%s> => <%s>\n", k, v)
+	}
 	return gestalt, nil
+}
+
+func ReadFile(fname string) (g Gestalt, e error) {
+	if fname == "" {
+		e = fmt.Errorf("fname is zero-value")
+		return
+	}
+	b, ioe := ioutil.ReadFile(fname)
+	if ioe != nil {
+		e = fmt.Errorf("Read error - %s", ioe)
+		return
+	}
+
+	return New(string(b))
 }
 
 func (g Gestalt) GetOrDefault(key string, defvalue interface{}) (value interface{}) {
@@ -115,20 +134,28 @@ func (g Gestalt) MustHave(keys ...string) []string {
 func parse(s string) (Gestalt, error) {
 	s = strings.Trim(s, " \t\n\r")
 	s = strings.Replace(s, "\r\n", "\n", -1)
-	s = strings.Replace(s, "\\", "", -1)
+	s = strings.Replace(s, "\\\n", "", -1)
 	sarr := strings.Split(s, "\n")
 	if len(sarr) == 0 {
 		return nil, fmt.Errorf("BUG - zero len array from spec parse step 1")
 	}
-
+//	for _, l := range sarr {
+//		fmt.Printf("DEBUG - after split: '%s'\n", l)
+//	}
 	gestalt := make(Gestalt)
 
 	for _, pspec := range sarr {
+		if len(pspec) == 0 {
+			continue
+		}
+
 		k, v, e := parsePSpec(pspec)
 		if e != nil {
 			return nil, fmt.Errorf("Parse property - %s", e)
 		}
-		gestalt[k] = v
+		if k != "" {
+			gestalt[k] = v
+		}
 	}
 	return gestalt, nil
 }
@@ -143,10 +170,13 @@ func parsePSpec(s string) (k string, v interface{}, e error) {
 	}
 
 	s = strings.Trim(s, " \t\r\n")
-
+	if len(s) == 0 {
+		return
+	}
 	stuple := strings.Split(s, "=")
 	if len(stuple) != 2 {
 		e = fmt.Errorf("format error for `%s`", s)
+		return
 	}
 
 	k, vspec := cleanTuple(stuple)
@@ -159,24 +189,30 @@ func parsePSpec(s string) (k string, v interface{}, e error) {
 			entry = strings.Trim(entry, " \t")
 			etuple := strings.Split(entry, ":")
 			ek, ev := cleanTuple(etuple)
-			mapv[ek] = ev
+			mapv[ek] = unquoteValue(ev)
 		}
 		v = mapv
 	case strings.HasSuffix(k, "[]"):
 		arrayv := strings.Split(vspec, ",")
 		for i, arrvi := range arrayv {
-			arrayv[i] = strings.Trim(arrvi, " \t")
+			arrayv[i] = unquoteValue(strings.Trim(arrvi, " \t"))
 		}
 		v = arrayv
 	default:
-		v = vspec
+		v = unquoteValue(vspec)
 	}
 
 	return
 }
 
+// trims leading and trailing whitespace from values
 func cleanTuple(tuple []string) (t0, t1 string) {
 	t0 = strings.Trim(tuple[0], " \t")
 	t1 = strings.Trim(tuple[1], " \t")
 	return
+}
+
+// removes the enclosing " chars from the value spec
+func unquoteValue(v string) string {
+	return strings.Trim(v, "\"")
 }

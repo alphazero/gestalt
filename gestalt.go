@@ -4,8 +4,8 @@ package gestalt
 
 import (
 	"fmt"
-	"strings"
 	"io/ioutil"
+	"strings"
 )
 
 // Gestalt is just a map[string]interface{} and can be used as such.
@@ -18,9 +18,9 @@ type Gestalt map[string]interface{}
 // Create a new Gestalt object from spec.
 // If spec is zero value string, it simply returns an empty intances.
 func New(spec string) (Gestalt, error) {
-//	if spec == "" {
-//		return nil, fmt.Errorf("spec is zerovalue")
-//	}
+	//	if spec == "" {
+	//		return nil, fmt.Errorf("spec is zerovalue")
+	//	}
 
 	gestalt, e := parse(spec)
 	if e != nil {
@@ -86,7 +86,7 @@ func (g Gestalt) GetMap(key string) (value map[string]string) {
 }
 
 func (g Gestalt) GetMapOrDefault(key string, defvalue map[string]string) (value map[string]string) {
-	value= g.GetMap(key)
+	value = g.GetMap(key)
 	if value == nil {
 		value = defvalue
 	}
@@ -126,6 +126,7 @@ func (g Gestalt) MustHave(keys ...string) []string {
 	}
 	return mset
 }
+
 // ----------------------------------------------------------------------
 // internal ops
 // ----------------------------------------------------------------------
@@ -139,9 +140,9 @@ func parse(s string) (Gestalt, error) {
 	if len(sarr) == 0 {
 		return nil, fmt.Errorf("BUG - zero len array from spec parse step 1")
 	}
-//	for _, l := range sarr {
-//		fmt.Printf("DEBUG - after split: '%s'\n", l)
-//	}
+	//	for _, l := range sarr {
+	//		fmt.Printf("DEBUG - after split: '%s'\n", l)
+	//	}
 	gestalt := make(Gestalt)
 
 	for _, pspec := range sarr {
@@ -153,6 +154,7 @@ func parse(s string) (Gestalt, error) {
 		if e != nil {
 			return nil, fmt.Errorf("Parse property - %s", e)
 		}
+		// ignore blank lines
 		if k != "" {
 			gestalt[k] = v
 		}
@@ -170,6 +172,7 @@ func parsePSpec(s string) (k string, v interface{}, e error) {
 	}
 
 	s = strings.Trim(s, " \t\r\n")
+
 	if len(s) == 0 {
 		return
 	}
@@ -188,8 +191,10 @@ func parsePSpec(s string) (k string, v interface{}, e error) {
 		for _, entry := range entries {
 			entry = strings.Trim(entry, " \t")
 			etuple := strings.Split(entry, ":")
-			ek, ev := cleanTuple(etuple)
-			mapv[ek] = unquoteValue(ev)
+			if len(etuple) == 2 {
+				ek, ev := cleanTuple(etuple)
+				mapv[ek] = unquoteValue(ev)
+			}
 		}
 		v = mapv
 	case strings.HasSuffix(k, "[]"):

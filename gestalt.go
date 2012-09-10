@@ -36,73 +36,77 @@ func (g Gestalt) GetOrDefault(key string, defvalue interface{}) (value interface
 	return
 }
 
-func (g Gestalt) GetArray(key string) (value []string, e error) {
+func (g Gestalt) GetArray(key string) (value []string) {
 	if !strings.HasSuffix(key, "map[]") && strings.HasSuffix(key, "[]") {
 		if g[key] != nil {
 			value = g[key].([]string)
 		}
-	} else {
-		e = fmt.Errorf("%s is not an array key", key)
 	}
 	return
 }
 
-func (g Gestalt) GetArrayOrDefault(key string, defvalue []string) (value []string, e error) {
-	value, e = g.GetArray(key)
-	if e != nil {
-		return
-	}
+// Returns default value if key not present.
+// Returns value if it is.
+func (g Gestalt) GetArrayOrDefault(key string, defvalue []string) (value []string) {
+	value = g.GetArray(key)
 	if value == nil {
 		value = defvalue
 	}
 	return
 }
 
-func (g Gestalt) GetMap(key string) (value map[string]string, e error) {
+// Returns map value if present.  Returns nil if key is not a valid
+// array key or if no such key is present.
+func (g Gestalt) GetMap(key string) (value map[string]string) {
 	if strings.HasSuffix(key, "map[]") {
 		if g[key] != nil {
 			value = g[key].(map[string]string)
 		}
-	} else {
-		e = fmt.Errorf("%s is not a map key", key)
 	}
 	return
 }
 
-func (g Gestalt) GetMapOrDefault(key string, defvalue map[string]string) (value map[string]string, e error) {
-	value, e = g.GetMap(key)
-	if e != nil {
-		return
-	}
+func (g Gestalt) GetMapOrDefault(key string, defvalue map[string]string) (value map[string]string) {
+	value= g.GetMap(key)
 	if value == nil {
 		value = defvalue
 	}
 	return
 }
 
-func (g Gestalt) GetString(key string) (value string, e error) {
+func (g Gestalt) GetString(key string) (value string) {
 	if !(strings.HasSuffix(key, "map[]") && strings.HasSuffix(key, "[]")) {
 		value = ""
 		if g[key] != nil {
 			value = g[key].(string)
 		}
-	} else {
-		e = fmt.Errorf("%s is not a string key", key)
 	}
 	return
 }
 
-func (g Gestalt) GetStringOrDefault(key string, defvalue string) (value string, e error) {
-	value, e = g.GetString(key)
-	if e != nil {
-		return
-	}
+func (g Gestalt) GetStringOrDefault(key string, defvalue string) (value string) {
+	value = g.GetString(key)
 	if value == "" {
 		value = defvalue
 	}
 	return
 }
 
+// Checks if the Gestalt instance has the specified key
+// values.  Returns nil if all are present, or the missing
+// subset of specified keys.
+func (g Gestalt) MustHave(keys ...string) []string {
+	mset := make([]string, 0)
+	for _, k := range keys {
+		if g[k] == nil {
+			mset = append(mset, k)
+		}
+	}
+	if len(mset) == 0 {
+		return nil
+	}
+	return mset
+}
 // ----------------------------------------------------------------------
 // internal ops
 // ----------------------------------------------------------------------

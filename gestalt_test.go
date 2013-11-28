@@ -5,6 +5,14 @@ import (
 	"fmt"
 )
 
+func TestLoadFileWithError(t *testing.T) {
+	fname := ""
+	_, e := Load(fname)
+	if e == nil {
+		t.Errorf("TestLoadFileWithError - gestalt.Load - error expected")
+	}
+}
+
 func TestLoadFile(t *testing.T) {
 	fname := "test/test.conf"
 	_, e := Load(fname)
@@ -23,7 +31,7 @@ func TestMultilineArray(t *testing.T) {
 	expected := []string{"a", "b", "c", "d"}
 	key := "foo[]"
 	spec = fmt.Sprintf(spec, key)
-	prop, e := DefineStr(spec)
+	prop, e := LoadFromStr(spec)
 	if e != nil {
 		t.Errorf("TestMultilineArray - gestalt.DefineStr - %s", e)
 	}
@@ -51,7 +59,7 @@ func TestMultilineString(t *testing.T) {
 	key := "a.long.sentence"
 	spec = fmt.Sprintf(spec, key)
 
-	prop, e := DefineStr(spec)
+	prop, e := LoadFromStr(spec)
 	if e != nil {
 		t.Errorf("TestMultilineString - New - %s", e)
 	}
@@ -73,7 +81,7 @@ some.array.with.quoted.values[] = a, b, "   c", "d "
 	key := "foo"
 	spec = fmt.Sprintf(spec, key)
 
-	prop, e := DefineStr(spec)
+	prop, e := LoadFromStr(spec)
 	if e != nil {
 		t.Errorf("TestNew - New - %s", e)
 	}

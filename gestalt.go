@@ -6,7 +6,7 @@
 //
 // Property keys are typed.
 //
-// The key suffixes `[]` and `map[]` specify []string and map[string]string, respectively, but
+// The key suffixes `[]` and `[:]` specify []string and map[string]string, respectively, but
 // otherwise can be used as prefix or embedded in key or value without reservation.
 //
 // The `#` char is reserved for comments and should not be used in keys or values.
@@ -51,6 +51,10 @@
 //  # for example
 //  another.array[] =  hi there  , bon voyage          # => []string{"hi there", "bon voyage"}
 //
+//  # array values can also be quoted if trailing and/or leading whitespace is required
+//  # for example
+//  yet.another[] = " lead", or, "trail "              # => []string{" lead", "or", "follow "}
+//
 //  # example of []string property - multiline
 //  # Note the ','s, and trailing comment on last line (only)
 //  web.resource.type.extensions[] = js,    \
@@ -61,19 +65,18 @@
 //
 //  # ------------------------------------------
 //  # examples of map[string]string properties - single line
-//  # key must end in `map[]`.
+//  # map key must end in `[:]`.
 //  # value must be of form <map-key>:<map-value>
-//  # map values seperated by `,`
+//  # map values must be seperated by `,`
 //
-//  this.is.a.map[] = a:b, b:c
-//  this.is.also.amap[] = a:b, b:c                    # parser only cares about suffix `map[]`
+//  this.is.a.map[:] = a:b, b:c
 //
 //  # key set is {"*", "list", "login"}
-//  dispatch.table.map[] = *:/ , list : /do/list, login: /do/user/login
+//  dispatch.table[:] = *:/ , list : /do/list, login: /do/user/login
 //
 //  # same thing spanning multiple lines:
 //
-//  dispatch.table.map[] = *:/ , \
+//  dispatch.tablex[:] = *:/ , \
 //                         list:/do/list, \
 //                         login:/do/user/login       # again, note and don't forget the `,`
 //
@@ -112,7 +115,7 @@ const (
 	COMMENT_PRE   = "#"
 	ARRAY         = "[]"
 	ARRAY_LEN     = len(ARRAY)
-	MAP           = "map[]"
+	MAP           = "[:]"
 	MAP_LEN       = len(MAP)
 	MIN_ENTRY_LEN = len("a=b")
 	INHERIT       = "*"
@@ -138,25 +141,20 @@ func Load(filename string) (p Properties, e error) {
 
 	b, err := ioutil.ReadFile(filename)
 	if err != nil {
-		e = fmt.Errorf("Error reading file <%s> : %s", filename, e)
+		e = fmt.Errorf("Error reading gestalt file <%s> : %s", filename, e)
 		return
 	}
 
-	p, e = Define(b)
-	if e != nil {
-		e = fmt.Errorf("Error reading file <%s> : %s", filename, e)
-		// assumes fall through to return below
-	}
-	return // possibly with error
+	return loadBuffer(b)
 }
 
 // Support embedded properties (e.g. without files)
 // convenience method
-func DefineStr(spec string) (p Properties, e error) {
-	return Define([]byte(spec))
+func LoadFromStr(spec string) (p Properties, e error) {
+	return loadBuffer([]byte(spec))
 }
 
-func Define(b []byte) (p Properties, e error) {
+func loadBuffer(b []byte) (p Properties, e error) {
 
 	lines, err := slurpPropSpecs(b)
 	if err != nil {
@@ -168,9 +166,12 @@ func Define(b []byte) (p Properties, e error) {
 }
 
 // Creates a new (empty) Properties object
+// REVU: don't see any point in this func
+/*
 func New() Properties {
 	return make(Properties)
 }
+*/
 
 // Return a clone of the argument Properties object
 func (p Properties) Clone() (clone Properties) {
@@ -257,6 +258,7 @@ func (p Properties) GetOrDefault(key string, defval interface{}) (v interface{})
 
 // returns nil/zero-value if no such key or not an array
 //  REVU - this silently returns nil if key type is mismatched ..
+// TODO: return error
 func (p Properties) GetArray(key string) []string {
 	if IsArrayKey(key) {
 		if v := p[key]; v == nil {
@@ -377,6 +379,7 @@ func define(pspecs []string) (p Properties, e error) {
 
 // converts the byte buffer 'b' to []string of lines
 // continuations (multi-line values) are addressed here.
+// REVU: TODO: inline comments for multilines
 func slurpPropSpecs(b []byte) (pspecs []string, err error) {
 	if b == nil {
 		err = errors.New("b ([]byte) is nil")

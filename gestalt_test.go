@@ -1,8 +1,8 @@
 package gestalt
 
 import (
-	"testing"
 	"fmt"
+	"testing"
 )
 
 func TestLoadFileWithError(t *testing.T) {
@@ -22,16 +22,17 @@ func TestLoadFile(t *testing.T) {
 }
 
 func TestMultilineArray(t *testing.T) {
-	spec :=`
+	spec := `
+# key will be defined in test body
 %s = a,  \
 	b,       \
 		c,    \
-			d
+			d   # inline comment foo
 `
 	expected := []string{"a", "b", "c", "d"}
 	key := "foo[]"
 	spec = fmt.Sprintf(spec, key)
-	prop, e := LoadFromStr(spec)
+	prop, e := LoadStr(spec)
 	if e != nil {
 		t.Errorf("TestMultilineArray - gestalt.DefineStr - %s", e)
 	}
@@ -59,7 +60,7 @@ func TestMultilineString(t *testing.T) {
 	key := "a.long.sentence"
 	spec = fmt.Sprintf(spec, key)
 
-	prop, e := LoadFromStr(spec)
+	prop, e := LoadStr(spec)
 	if e != nil {
 		t.Errorf("TestMultilineString - New - %s", e)
 	}
@@ -81,7 +82,7 @@ some.array.with.quoted.values[] = a, b, "   c", "d "
 	key := "foo"
 	spec = fmt.Sprintf(spec, key)
 
-	prop, e := LoadFromStr(spec)
+	prop, e := LoadStr(spec)
 	if e != nil {
 		t.Errorf("TestNew - New - %s", e)
 	}

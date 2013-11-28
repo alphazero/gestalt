@@ -150,7 +150,7 @@ func Load(filename string) (p Properties, e error) {
 
 // Support embedded properties (e.g. without files)
 // convenience method
-func LoadFromStr(spec string) (p Properties, e error) {
+func LoadStr(spec string) (p Properties, e error) {
 	return loadBuffer([]byte(spec))
 }
 
@@ -198,10 +198,13 @@ func (p Properties) Copy(from Properties, overwrite bool) {
 // Inherits from the parent key/value pairs if receiver[key] is nil.
 // If key is array receiver's value array will be PRE-prended with parent's.
 // If key is map receiver's value map will be augmented with parent's.
+// nil input is silently ignored.
 //  REVU - issue regarding preserving order in parent array key values
-func (p Properties) InheritFrom(parent Properties) {
-	// TODO - REVU - either silently Debug log or return error on nil 'from'
-	for k, v := range parent {
+func (p Properties) Inherit(from Properties) {
+	if from == nil {
+		return
+	}
+	for k, v := range from {
 		pv := p[k]
 		if pv == nil {
 			p[k] = v
@@ -236,13 +239,15 @@ func (p Properties) InheritFrom(parent Properties) {
 }
 
 // Verifies that the receiver has values for the set of keys.
-// Returns true, 0 len array if verified.
+// Returns true, 0 len array if verified, or, if keys arg is nil.
 // Returns false, and array of missing values otherwise.
 func (p Properties) VerifyMust(keys ...string) (bool, []string) {
 	missing := []string{}
-	for _, rk := range keys {
-		if p[rk] == nil {
-			missing = append(missing, rk)
+	if keys != nil {
+		for _, rk := range keys {
+			if p[rk] == nil {
+				missing = append(missing, rk)
+			}
 		}
 	}
 	return len(missing) == 0, missing
@@ -424,7 +429,7 @@ func parseProperty(spec string) (key string, value interface{}, e error) {
 
 	// Verify well-formedness
 	if len(propTuple) != 2 || propTuple[1] == "" {
-		fmt.Printf("%s", propTuple[0]);
+		fmt.Printf("%s", propTuple[0])
 		e = errors.New(fmt.Sprintf("property spec '%s' is malformed", spec))
 		return
 	}
@@ -441,7 +446,7 @@ func parseProperty(spec string) (key string, value interface{}, e error) {
 			// REVU - trim whitespace around k/v?
 			ek := strings.Trim(_kvarr[0], WS)
 			ev := strings.Trim(_kvarr[1], WS)
-//			kvmap[strings.Trim(_kvarr[0], WS)] = strings.Trim(_kvarr[1], WS)
+			//			kvmap[strings.Trim(_kvarr[0], WS)] = strings.Trim(_kvarr[1], WS)
 			kvmap[strings.Trim(ek, QUOTE)] = strings.Trim(ev, QUOTE)
 		}
 		value = kvmap
@@ -449,12 +454,12 @@ func parseProperty(spec string) (key string, value interface{}, e error) {
 		arrv := strings.Split(vrep, VAL_DELIM)
 		for i, v := range arrv {
 			v = strings.Trim(v, WS)
-			arrv[i] = strings.Trim(v, QUOTE);
+			arrv[i] = strings.Trim(v, QUOTE)
 		}
 		value = arrv
 	} else {
 		value = strings.Trim(propTuple[1], WS)
-		value = strings.Trim(vrep, QUOTE);
+		value = strings.Trim(vrep, QUOTE)
 	}
 
 	return

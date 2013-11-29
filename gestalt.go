@@ -116,9 +116,6 @@ const (
 	MAP           = "[:]"
 	MAP_LEN       = len(MAP)
 	MIN_ENTRY_LEN = len("a=b")
-
-//	INHERIT       = "*"
-//	INHERIT_MAP   = INHERIT + KV_DELIM + INHERIT
 )
 const (
 	R_CONTINUATION = '\\'
@@ -236,6 +233,7 @@ func (p Properties) VerifyMust(keys ...string) (bool, []string) {
 	return len(missing) == 0, missing
 }
 
+// REVU - this doesn't make much sense - remove.
 //// returns generic (interface{} prop value or default values if nil
 //func (p Properties) GetOrDefault(key string, defval interface{}) (v interface{}) {
 //	if v = p[key]; v == nil {
@@ -244,9 +242,7 @@ func (p Properties) VerifyMust(keys ...string) (bool, []string) {
 //	return
 //}
 
-// returns nil/zero-value if no such key or not an array
-//  REVU - this silently returns nil if key type is mismatched ..
-// TODO: return error
+// returns nil/zero-value if no such key or key type is not array
 func (p Properties) GetArray(key string) []string {
 	if IsArrayKey(key) {
 		if v := p[key]; v == nil {
@@ -265,8 +261,7 @@ func (p Properties) GetArrayOrDefault(key string, defval []string) (v []string) 
 	return
 }
 
-// returns nil/zero-value if no such key or not a map
-//  REVU - this silently returns nil if key type is mismatched ..
+// returns nil/zero-value if no such key or not a map, or if key type is not map
 func (p Properties) GetMap(key string) map[string]string {
 	if IsMapKey(key) {
 		if v := p[key]; v == nil {

@@ -9,7 +9,8 @@
 // The key suffixes `[]` and `[:]` specify []string and map[string]string, respectively, but
 // otherwise can be used as prefix or embedded in key or value without reservation.
 //
-// The `#` char is reserved for comments and should not be used in keys or values.
+// The `#` char is reserved for comments and can not be used in keys or values.
+// The `\` char is reserved for line continuation and can not be used in comments, keys, or values.
 //
 // Syntax supports:
 //
@@ -31,7 +32,7 @@
 //
 //  the property key = property value                  # key"the property key", value:"property value"
 //  the property key=property value                    # same as above
-//  a.property@the.key.called!foo = joe@schmoe.com     # basically only embedded hashsign is disallowed
+//  a.property@the.key.called!foo = joe@schmoe.com     # only embedded hashsign and/or forward-slashes are disallowed
 //
 //  # example of string properties - multiline
 //  # => "value that "
@@ -53,10 +54,10 @@
 //
 //  # array values can also be quoted if trailing and/or leading whitespace is required
 //  # for example
-//  yet.another[] = " lead", or, "trail "              # => []string{" lead", "or", "follow "}
+//  yet.another[] = " lead", or, "trail "              # => []string{" lead", "or", "trail  "}
 //
 //  # example of []string property - multiline
-//  # Note the ','s, and trailing comment on last line (only)
+//  # note that layout is insignificant
 //  web.resource.type.extensions[] = js,    \
 //                                   css  , \
 //                                   gif      \
@@ -77,8 +78,8 @@
 //  # same thing spanning multiple lines:
 //
 //  dispatch.tablex[:] = *:/ , \
-//                         list:/do/list, \
-//                         login:/do/user/login       # again, note and don't forget the `,`
+//                         list:/do/list, \           # note the `,`
+//                         login:/do/user/login
 //
 // The associated Properties (type) defines the properties API, but is itself simply a
 // a map[string]interface{} and can be used as such (without any type safety).
@@ -93,6 +94,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+	"unicode/utf8"
 )
 
 // ----------------------------------------------------------------------
@@ -102,24 +104,25 @@ import (
 // REVU - too many flavors of whitespace
 
 const (
-	EMPTY         = ""
+	NIL           = ""
 	VAL_DELIM     = ","
 	KV_DELIM      = ":"
 	QUOTE         = "\""
-	CONTINUATION  = "\\\n"
-	CRLF          = "\r\n"
-	LF            = "\n"
 	PKV_SEP       = "="
 	TRIMSET       = "\n\r \t"
 	WS            = " \t"
-	COMMENT_PRE   = "#"
 	ARRAY         = "[]"
 	ARRAY_LEN     = len(ARRAY)
 	MAP           = "[:]"
 	MAP_LEN       = len(MAP)
 	MIN_ENTRY_LEN = len("a=b")
-	INHERIT       = "*"
-	INHERIT_MAP   = INHERIT + KV_DELIM + INHERIT
+
+//	INHERIT       = "*"
+//	INHERIT_MAP   = INHERIT + KV_DELIM + INHERIT
+)
+const (
+	R_CONTINUATION = '\\'
+	R_COMMENT      = '#'
 )
 
 // Properties is based on map and can be accessed as such
@@ -145,33 +148,13 @@ func Load(filename string) (p Properties, e error) {
 		return
 	}
 
-	return loadBuffer(b)
+	return loadBuffer(bytes.NewBuffer(b).String())
 }
 
 // Support embedded properties (e.g. without files)
-// convenience method
 func LoadStr(spec string) (p Properties, e error) {
-	return loadBuffer([]byte(spec))
+	return loadBuffer(spec)
 }
-
-func loadBuffer(b []byte) (p Properties, e error) {
-
-	lines, err := slurpPropSpecs(b)
-	if err != nil {
-		e = fmt.Errorf("%s", err)
-		return
-	}
-
-	return define(lines)
-}
-
-// Creates a new (empty) Properties object
-// REVU: don't see any point in this func
-/*
-func New() Properties {
-	return make(Properties)
-}
-*/
 
 // Return a clone of the argument Properties object
 func (p Properties) Clone() (clone Properties) {
@@ -253,13 +236,13 @@ func (p Properties) VerifyMust(keys ...string) (bool, []string) {
 	return len(missing) == 0, missing
 }
 
-// returns generic (interface{} prop value or default values if nil
-func (p Properties) GetOrDefault(key string, defval interface{}) (v interface{}) {
-	if v = p[key]; v == nil {
-		v = defval
-	}
-	return
-}
+//// returns generic (interface{} prop value or default values if nil
+//func (p Properties) GetOrDefault(key string, defval interface{}) (v interface{}) {
+//	if v = p[key]; v == nil {
+//		v = defval
+//	}
+//	return
+//}
 
 // returns nil/zero-value if no such key or not an array
 //  REVU - this silently returns nil if key type is mismatched ..
@@ -363,47 +346,68 @@ func (p Properties) Print() {
 // internal ops
 // ----------------------------------------------------------------------
 
-// defines a new Properties object based on the array of prop key/value
-// spec.
-func define(pspecs []string) (p Properties, e error) {
+func loadBuffer(s string) (p Properties, e error) {
+
+	if s == NIL {
+		e = errors.New("s is nil")
+		return
+	}
+
+	specs := splitCleanPropSpecs(s)
+
 	p = make(Properties)
-	if len(pspecs) > 0 {
-		for _, spec := range pspecs {
-			k, v, err := parseProperty(spec)
-			if err != nil {
-				e = fmt.Errorf("error parsing properties- %s", err)
-				return
-			}
-			if k != "" {
-				p[k] = v
-			}
+	for _, spec := range specs {
+		k, v, err := parseProperty(spec)
+		if err != nil {
+			e = fmt.Errorf("error parsing properties- %s", err)
+			return
+		}
+		if k != NIL {
+			p[k] = v
 		}
 	}
 	return
 }
 
-// converts the byte buffer 'b' to []string of lines
-// continuations (multi-line values) are addressed here.
-// REVU: TODO: inline comments for multilines
-func slurpPropSpecs(b []byte) (pspecs []string, err error) {
-	if b == nil {
-		err = errors.New("b ([]byte) is nil")
-		return
-	}
-	strbuff := bytes.NewBuffer(b).String()
+// converts to []string of lines.  this is mainly addressing
+// comments (both flavors) & continuations (multi-line values)
+// beyond a general split on crlf
+func splitCleanPropSpecs(s string) (pspecs []string) {
 
 	// trim overall buffer
-	strbuff = strings.Trim(strbuff, TRIMSET)
+	s = strings.Trim(s, TRIMSET)
 
-	// REVU - smells - address different file encodings
-	// nop for []byte via Define
-	strbuff = strings.Replace(strbuff, CRLF, LF, -1)
-
-	// merge multi-lines into a single line
-	strbuff = strings.Replace(strbuff, CONTINUATION, "", -1)
+	erase := false
+	cont := false
+	reset := false
+	b := make([]byte, len(s))
+	off := 0
+	s = strings.Trim(s, TRIMSET)
+	for _, c := range s {
+		if c == rune(R_CONTINUATION) {
+			erase = true
+			cont = true
+		} else if c == R_COMMENT {
+			erase = true
+		} else if c == '\n' {
+			if cont {
+				cont = false
+				reset = true
+			} else {
+				erase = false
+			}
+		} else if reset {
+			erase = false
+			reset = false
+		}
+		if !erase {
+			off += utf8.EncodeRune(b[off:], c)
+		}
+	}
+	s = string(b[0:off])
 
 	// split to get distinct specs.
-	pspecs = strings.Split(strbuff, LF)
+	pspecs = strings.Split(s, "\n")
 
 	return
 }
@@ -413,29 +417,20 @@ func slurpPropSpecs(b []byte) (pspecs []string, err error) {
 // Otherwise (key, value) pair are returned.
 func parseProperty(spec string) (key string, value interface{}, e error) {
 	if len(spec) < MIN_ENTRY_LEN {
-		return
-	}
-	// ignore comment lines
-	if strings.HasPrefix(spec, COMMENT_PRE) {
-		return
-	}
-
-	// remove trailing comment matter and continue
-	if tci := strings.Index(spec, COMMENT_PRE); tci > -1 {
-		spec = spec[:tci-1]
+		return NIL, value, e
 	}
 
 	propTuple := strings.Split(strings.Trim(spec, TRIMSET), PKV_SEP)
 
 	// Verify well-formedness
-	if len(propTuple) != 2 || propTuple[1] == "" {
-		fmt.Printf("%s", propTuple[0])
+	if len(propTuple) != 2 || propTuple[1] == NIL {
 		e = errors.New(fmt.Sprintf("property spec '%s' is malformed", spec))
 		return
 	}
 
 	key = strings.Trim(propTuple[0], WS)
 	vrep := strings.Trim(propTuple[1], WS)
+
 	// do NOT change order of parse - maps first
 	if IsMapKey(key) {
 		kvmap := make(map[string]string)
@@ -443,10 +438,8 @@ func parseProperty(spec string) (key string, value interface{}, e error) {
 		for _, _kv := range kvpairs {
 			_kv = strings.Trim(_kv, WS)
 			_kvarr := strings.Split(_kv, KV_DELIM)
-			// REVU - trim whitespace around k/v?
 			ek := strings.Trim(_kvarr[0], WS)
 			ev := strings.Trim(_kvarr[1], WS)
-			//			kvmap[strings.Trim(_kvarr[0], WS)] = strings.Trim(_kvarr[1], WS)
 			kvmap[strings.Trim(ek, QUOTE)] = strings.Trim(ev, QUOTE)
 		}
 		value = kvmap

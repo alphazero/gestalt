@@ -11,6 +11,7 @@
 //
 // The `#` char is reserved for comments and can not be used in keys or values.
 // The `\` char is reserved for line continuation and can not be used in comments, keys, or values.
+// The `:` char is reserved for map k:v tuples and can not be used in map keys, or values.
 //
 // Syntax supports:
 //
@@ -34,9 +35,10 @@
 //  the property key=property value                    # same as above
 //  a.property@the.key.called!foo = joe@schmoe.com     # only embedded hashsign and/or forward-slashes are disallowed
 //
-//  # example of string properties - multiline
-//  # => "value that "
-//  this is a multiline property = value that spans multiple lines. \
+//  # example of string properties - multi-line
+//  # layout is significant only for multi-line string properties
+//
+//  this is a multi-line property = value that spans multiple lines. \
 //  Note that value line continuations \
 //          include whitespace leading each new line.  # e.g. this line appends "        include whitespace ..."
 //
@@ -50,14 +52,17 @@
 //  # array values can have embedded white space as well
 //  # basically, any leading/trailing whitespace around `,` is trimmed
 //  # for example
+//
 //  another.array[] =  hi there  , bon voyage          # => []string{"hi there", "bon voyage"}
 //
 //  # array values can also be quoted if trailing and/or leading whitespace is required
 //  # for example
+//
 //  yet.another[] = " lead", or, "trail "              # => []string{" lead", "or", "trail  "}
 //
 //  # example of []string property - multiline
 //  # note that layout is insignificant
+//
 //  web.resource.type.extensions[] = js,    \
 //                                   css  , \
 //                                   gif      \
@@ -76,6 +81,7 @@
 //  dispatch.table[:] = *:/ , list : /do/list, login: /do/user/login
 //
 //  # same thing spanning multiple lines:
+//  # note that layout is insignificant
 //
 //  dispatch.tablex[:] = *:/ , \
 //                         list:/do/list, \           # note the `,`
@@ -104,22 +110,20 @@ import (
 // REVU - too many flavors of whitespace
 
 const (
-	NIL           = ""
-	VAL_DELIM     = ","
-	KV_DELIM      = ":"
-	QUOTE         = "\""
-	PKV_SEP       = "="
-	TRIMSET       = "\n\r \t"
-	WS            = " \t"
-	ARRAY         = "[]"
-	ARRAY_LEN     = len(ARRAY)
-	MAP           = "[:]"
-	MAP_LEN       = len(MAP)
-	MIN_ENTRY_LEN = len("a=b")
-)
-const (
-	R_CONTINUATION = '\\'
-	R_COMMENT      = '#'
+	empty         = ""
+	val_delim     = ","
+	kv_delim      = ":"
+	quote         = "\""
+	pkv_sep       = "="
+	trimset       = "\n\r \t"
+	ws            = " \t"
+	array         = "[]"
+	array_len     = len(array)
+	cmap          = "[:]"
+	cmap_len      = len(cmap)
+	min_entry_len = len("a=b")
+	continuation  = '\\'
+	comment       = '#'
 )
 
 // Properties is based on map and can be accessed as such
@@ -176,8 +180,8 @@ func (p Properties) Copy(from Properties, overwrite bool) {
 }
 
 // Inherits from the parent key/value pairs if receiver[key] is nil.
-// If key is array receiver's value array will be PRE-prended with parent's.
-// If key is map receiver's value map will be augmented with parent's.
+// If key is array, receiver's value array will be PRE-prended with parent's.
+// If key is map, receiver's value map will be augmented with parent's.
 // nil input is silently ignored.
 //  REVU - issue regarding preserving order in parent array key values
 func (p Properties) Inherit(from Properties) {
@@ -190,7 +194,7 @@ func (p Properties) Inherit(from Properties) {
 			p[k] = v
 		} else {
 			switch {
-			case IsArrayKey(k):
+			case isArrayKey(k):
 				// REVU - somewhat funky semantics here
 				// attempting to preserve order of array values (in child)
 				// but parent's order is chomped
@@ -205,7 +209,7 @@ func (p Properties) Inherit(from Properties) {
 					}
 				}
 				p[k] = append(narrv, pv.([]string)...)
-			case IsMapKey(k):
+			case isMapKey(k):
 				mapv := v.(map[string]string)
 				pmapv := pv.(map[string]string)
 				for mk, mv := range mapv {
@@ -244,7 +248,7 @@ func (p Properties) VerifyMust(keys ...string) (bool, []string) {
 
 // returns nil/zero-value if no such key or key type is not array
 func (p Properties) GetArray(key string) []string {
-	if IsArrayKey(key) {
+	if isArrayKey(key) {
 		if v := p[key]; v == nil {
 			return nil
 		}
@@ -263,7 +267,7 @@ func (p Properties) GetArrayOrDefault(key string, defval []string) (v []string) 
 
 // returns nil/zero-value if no such key or not a map, or if key type is not map
 func (p Properties) GetMap(key string) map[string]string {
-	if IsMapKey(key) {
+	if isMapKey(key) {
 		if v := p[key]; v == nil {
 			return nil
 		}
@@ -282,7 +286,7 @@ func (p Properties) GetMapOrDefault(key string, defval map[string]string) (v map
 
 // String value property - returns nil/zero-value if no such key or not a map
 func (p Properties) GetString(key string) string {
-	if !(IsMapKey(key) || IsArrayKey(key)) {
+	if !(isMapKey(key) || isArrayKey(key)) {
 		if v := p[key]; v == nil {
 			return ""
 		}
@@ -303,21 +307,14 @@ func (p Properties) MustGetString(key string) (v string) {
 
 // Returns true if provided key is a valid array property value key,
 // suitable for use with GetMap(mapkey)
-func IsMapKey(key string) bool {
-	if strings.HasSuffix(key, MAP) {
-		//		if idx := strings.LastIndex(key, MAP); idx == len(key)-MAP_LEN {
-		return true
-	}
-	return false
+func isMapKey(key string) bool {
+	return strings.HasSuffix(key, cmap)
 }
 
 // Returns true if provided key is a valid map property value key
 // suitable for use with GetArray(arrkey)
-func IsArrayKey(key string) bool {
-	if !IsMapKey(key) && strings.HasSuffix(key, ARRAY) {
-		return true
-	}
-	return false
+func isArrayKey(key string) bool {
+	return !isMapKey(key) && strings.HasSuffix(key, array)
 }
 
 // Returns a pretty print string for Properties.
@@ -339,11 +336,16 @@ func (p Properties) Print() {
 
 // ----------------------------------------------------------------------
 // internal ops
+// REVU: this simplistic approach to parsing places too many constraints:
+// 1 - continuations for maps/arrays are redundant given the ',' element delims
+// 2 - can't use ':' or '#' in k/v - these are fairly useful/common glyphs
+// 3 - psuedo quoting and not true quoting
+// TODO: try lexing this thing ..
 // ----------------------------------------------------------------------
 
 func loadBuffer(s string) (p Properties, e error) {
 
-	if s == NIL {
+	if s == empty {
 		e = errors.New("s is nil")
 		return
 	}
@@ -357,7 +359,7 @@ func loadBuffer(s string) (p Properties, e error) {
 			e = fmt.Errorf("error parsing properties- %s", err)
 			return
 		}
-		if k != NIL {
+		if k != empty {
 			p[k] = v
 		}
 	}
@@ -370,19 +372,19 @@ func loadBuffer(s string) (p Properties, e error) {
 func splitCleanPropSpecs(s string) (pspecs []string) {
 
 	// trim overall buffer
-	s = strings.Trim(s, TRIMSET)
+	s = strings.Trim(s, trimset)
 
 	erase := false
 	cont := false
 	reset := false
 	b := make([]byte, len(s))
 	off := 0
-	s = strings.Trim(s, TRIMSET)
+	s = strings.Trim(s, trimset)
 	for _, c := range s {
-		if c == rune(R_CONTINUATION) {
+		if c == rune(continuation) {
 			erase = true
 			cont = true
-		} else if c == R_COMMENT {
+		} else if c == comment {
 			erase = true
 		} else if c == '\n' {
 			if cont {
@@ -410,44 +412,45 @@ func splitCleanPropSpecs(s string) (pspecs []string) {
 // attempts to parse a single <key> = <value> property def spec.
 // Returns ("", "") if comment or malformed.
 // Otherwise (key, value) pair are returned.
+// REVU TODO support true quotes to allow use of ':', '\', and '#' in k/v
 func parseProperty(spec string) (key string, value interface{}, e error) {
-	if len(spec) < MIN_ENTRY_LEN {
-		return NIL, value, e
+	if len(spec) < min_entry_len {
+		return empty, value, e
 	}
 
-	propTuple := strings.Split(strings.Trim(spec, TRIMSET), PKV_SEP)
+	propTuple := strings.Split(strings.Trim(spec, trimset), pkv_sep)
 
 	// Verify well-formedness
-	if len(propTuple) != 2 || propTuple[1] == NIL {
+	if len(propTuple) != 2 || propTuple[1] == empty {
 		e = errors.New(fmt.Sprintf("property spec '%s' is malformed", spec))
 		return
 	}
 
-	key = strings.Trim(propTuple[0], WS)
-	vrep := strings.Trim(propTuple[1], WS)
+	key = strings.Trim(propTuple[0], ws)
+	vrep := strings.Trim(propTuple[1], ws)
 
 	// do NOT change order of parse - maps first
-	if IsMapKey(key) {
+	if isMapKey(key) {
 		kvmap := make(map[string]string)
-		kvpairs := strings.Split(vrep, VAL_DELIM)
+		kvpairs := strings.Split(vrep, val_delim)
 		for _, _kv := range kvpairs {
-			_kv = strings.Trim(_kv, WS)
-			_kvarr := strings.Split(_kv, KV_DELIM)
-			ek := strings.Trim(_kvarr[0], WS)
-			ev := strings.Trim(_kvarr[1], WS)
-			kvmap[strings.Trim(ek, QUOTE)] = strings.Trim(ev, QUOTE)
+			_kv = strings.Trim(_kv, ws)
+			_kvarr := strings.Split(_kv, kv_delim)
+			ek := strings.Trim(_kvarr[0], ws)
+			ev := strings.Trim(_kvarr[1], ws)
+			kvmap[strings.Trim(ek, quote)] = strings.Trim(ev, quote)
 		}
 		value = kvmap
-	} else if IsArrayKey(key) {
-		arrv := strings.Split(vrep, VAL_DELIM)
+	} else if isArrayKey(key) {
+		arrv := strings.Split(vrep, val_delim)
 		for i, v := range arrv {
-			v = strings.Trim(v, WS)
-			arrv[i] = strings.Trim(v, QUOTE)
+			v = strings.Trim(v, ws)
+			arrv[i] = strings.Trim(v, quote)
 		}
 		value = arrv
 	} else {
-		value = strings.Trim(propTuple[1], WS)
-		value = strings.Trim(vrep, QUOTE)
+		value = strings.Trim(propTuple[1], ws)
+		value = strings.Trim(vrep, quote)
 	}
 
 	return

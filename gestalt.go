@@ -1,8 +1,8 @@
-// Copyright 2012 Joubin Houshyar. All rights reserved.
+// Copyright 2012-2015 Joubin Houshyar. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Properties provides basic property file utility.
+// Gestalt provides basic property file utility.
 //
 // Property keys are typed.
 //
@@ -128,6 +128,7 @@ const (
 
 // Properties is based on map and can be accessed as such
 // but best to use the API
+// REVU: should be private.
 type Properties map[string]interface{}
 
 // ----------------------------------------------------------------------
@@ -180,7 +181,7 @@ func (p Properties) Copy(from Properties, overwrite bool) {
 }
 
 // Inherits from the parent key/value pairs if receiver[key] is nil.
-// If key is array, receiver's value array will be PRE-prended with parent's.
+// If key is array, receiver's value array will be PRE-pended with parent's.
 // If key is map, receiver's value map will be augmented with parent's.
 // nil input is silently ignored.
 //  REVU - issue regarding preserving order in parent array key values
